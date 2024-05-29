@@ -30,6 +30,10 @@ jobs:
     steps:
       - name: Checkout Concordia
         uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
+      - name: Check python setup
+        run:
+          python --version
+          pip list
       - name: Build distribution
         run: python setup.py sdist bdist_wheel
       - name: Save artifact
