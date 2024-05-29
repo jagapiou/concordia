@@ -8,13 +8,13 @@ on:
   workflow_dispatch:
     inputs:
       test_sdist:
-        description: 'Tests sdist before upload'
+        description: 'Test sdist before upload'
         type: boolean
         default: true
       upload_to_test_pypi:
         description: 'Upload to Test PyPi'
         type: boolean
-        default: true
+        default: false
       upload_to_pypi:
         description: 'Upload to PyPi'
         type: boolean
@@ -70,6 +70,7 @@ jobs:
   publish:
     name: Publish
     needs: test
+    if: ${{ ! failure() }}
     runs-on: ubuntu-latest
     environment:
       name: pypi
