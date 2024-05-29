@@ -36,7 +36,7 @@ jobs:
         uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808
         with:
           name: dist
-          path: /dist
+          path: ./dist
           retention-days: 1
 
   test:
@@ -50,7 +50,7 @@ jobs:
         uses: actions/download-artifact@65a9edc5881444af0b9093a5e628f2fe47ea3b2e
         with:
           name: dist
-          path: /dist
+          path: ./dist
       - name: Set up Python
         uses: actions/setup-python@0a5c61591373683505ea898e09a3ea4f39ef2b9c
         with:
@@ -82,7 +82,7 @@ jobs:
         uses: actions/download-artifact@65a9edc5881444af0b9093a5e628f2fe47ea3b2e
         with:
           name: dist
-          path: /dist
+          path: ./dist
       - name: Publish to TestPyPI
         if: github.event_name == 'release' || inputs.upload_to_test_pypi
         uses: pypa/gh-action-pypi-publish@e53eb8b103ffcb59469888563dc324e3c8ba6f06
