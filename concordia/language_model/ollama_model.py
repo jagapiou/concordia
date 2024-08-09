@@ -90,7 +90,8 @@ class OllamaLanguageModel(language_model.LanguageModel):
         prompt=prompt_with_system_message,
         options={'stop': terminators},
         keep_alive='10m',
-    ).response
+    )
+    result = response.response
 
     if self._measurements is not None:
       self._measurements.publish_datum(
