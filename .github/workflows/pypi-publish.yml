@@ -29,8 +29,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - name: pass
-        run: exit 0
+      - name: fail
+        run: exit 1
 
   test:
     name: Test
