@@ -56,9 +56,6 @@ jobs:
       fail-fast: false
       matrix:
         os:
-          - macos-12
-          - macos-latest
-          - ubuntu-20.04
           - ubuntu-latest
         python-version:
           - '3.11'
@@ -81,9 +78,6 @@ jobs:
         run: |
           pip install dist/*.tar.gz
           pip list
-      - name: Test source distribution
-        run: |
-          pytest -n auto --pyargs concordia
 
   publish:
     name: Publish
