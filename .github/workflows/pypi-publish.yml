@@ -29,20 +29,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - name: Checkout Concordia
-        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
-      - name: Show Python setup
-        run: |
-          python --version
-          pip list
-      - name: Build distribution
-        run: python setup.py sdist bdist_wheel
-      - name: Save artifact
-        uses: actions/upload-artifact@50769540e7f4bd5e21e526ee35c689e35e0d6874
-        with:
-          name: dist
-          path: ./dist
-          retention-days: 1
+      - name: pass
+        run: exit 0
 
   test:
     name: Test
@@ -75,19 +63,5 @@ jobs:
       id-token: write
     timeout-minutes: 10
     steps:
-      - name: Load artifact
-        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
-        with:
-          name: dist
-          path: ./dist
-      - name: Publish to TestPyPI
-        if: github.event_name == 'release' || inputs.upload_to_test_pypi
-        uses: pypa/gh-action-pypi-publish@0ab0b79471669eb3a4d647e625009c62f9f3b241
-        with:
-          repository-url: https://test.pypi.org/legacy/
-          verbose: true
-      - name: Publish to PyPI
-        if: github.event_name == 'release' || inputs.upload_to_pypi
-        uses: pypa/gh-action-pypi-publish@0ab0b79471669eb3a4d647e625009c62f9f3b241
-        with:
-          verbose: true
+      - name: echo
+        run: echo ran
