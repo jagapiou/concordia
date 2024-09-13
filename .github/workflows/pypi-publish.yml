@@ -87,8 +87,8 @@ jobs:
 
   publish:
     name: Publish
-    needs: test
-    if: ${{ ! failure() }}
+    needs: [build, test]
+    if: needs.build.result == 'success' && needs.test.result != 'failure'
     runs-on: ubuntu-latest
     environment:
       name: pypi
