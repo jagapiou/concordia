@@ -36,7 +36,9 @@ jobs:
           python --version
           pip list
       - name: Build distribution
-        run: python setup.py sdist bdist_wheel
+        run: |
+          python setup.py sdist bdist_wheel
+          ls dist/*
       - name: Save artifact
         uses: actions/upload-artifact@50769540e7f4bd5e21e526ee35c689e35e0d6874
         with:
