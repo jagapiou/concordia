@@ -38,7 +38,7 @@ jobs:
       - name: Build distribution
         run: |
           python setup.py sdist bdist_wheel
-          if [[ -e dist/gdm-concordia-*.tar.gz)" ]]; then
+          if [[ -e dist/gdm-concordia-*.tar.gz ]]; then
              # Workaround old setuptools not normalizing name of sdist.
              ls dist/*
              OLD="$(ls dist/gdm-concordia-*.tar.gz)"
