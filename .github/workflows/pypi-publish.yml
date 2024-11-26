@@ -31,13 +31,20 @@ jobs:
     steps:
       - name: Checkout Concordia
         uses: actions/checkout@d632683dd7b4114ad314bca15554477dd762a938
-      - name: Show Python setup
+      - name: Setup Python setup
         run: |
           python --version
           pip list
       - name: Build distribution
         run: |
           python setup.py sdist bdist_wheel
+          if [[ -e dist/gdm-concordia-*.tar.gz)" ]]; then
+             # Workaround old setuptools not normalizing name of sdist.
+             ls dist/*
+             OLD="$(ls dist/gdm-concordia-*.tar.gz)"
+             NEW="$(echo "$OLD" | sed s/gdm-concordia/gdm_concordia/)"
+             mv $OLD $NEW
+          fi
           ls dist/*
       - name: Save artifact
         uses: actions/upload-artifact@50769540e7f4bd5e21e526ee35c689e35e0d6874
