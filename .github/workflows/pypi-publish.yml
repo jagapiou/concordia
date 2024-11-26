@@ -37,6 +37,7 @@ jobs:
           pip list
       - name: Build distribution
         run: |
+          pip install --upgrade setuptools
           python setup.py sdist bdist_wheel
           ls dist/*
       - name: Save artifact
