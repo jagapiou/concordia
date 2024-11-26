@@ -10,7 +10,7 @@ on:
       run_tests:
         description: 'Test sdist before upload'
         type: boolean
-        default: true
+        default: false
       upload_to_test_pypi:
         description: 'Upload to Test PyPi'
         type: boolean
@@ -37,7 +37,9 @@ jobs:
           pip list
       - name: Build distribution
         run: |
-          python setup.py sdist bdist_wheel
+          # python setup.py sdist bdist_wheel
+          python -m build
+          ls dist/*
           # Workaround old setuptools not normalizing name in sdist.
           for OLD in ./dist/gdm-concordia-*; do
              NEW="$(echo "$OLD" | sed s/gdm-concordia/gdm_concordia/)"
