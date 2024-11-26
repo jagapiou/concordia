@@ -42,7 +42,7 @@ jobs:
           for OLD in ./dist/gdm-concordia-*; do
              NEW="$(echo "$OLD" | sed s/gdm-concordia/gdm_concordia/)"
              mv "$OLD" "$NEW"
-          fi
+          done
           ls dist/*
       - name: Save artifact
         uses: actions/upload-artifact@50769540e7f4bd5e21e526ee35c689e35e0d6874
