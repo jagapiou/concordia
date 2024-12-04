@@ -41,12 +41,13 @@ jobs:
       fail-fast: false
       matrix:
         os:
-          - macos-12
+          - macos-13
           - macos-latest
           - ubuntu-20.04
           - ubuntu-latest
         python-version:
           - '3.11'
+          - '3.12'
 
     steps:
       - name: Set up Python ${{ matrix.python_version }}
