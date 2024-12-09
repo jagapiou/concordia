@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 # Set up devcontainer
-
 set -e
-pip install -e .[dev]
-pip install -r examples/requirements.txt
+pip install --require-virtualenv --require-hashes -r requirements.txt
+pip install --require-virtualenv --no-deps --no-index --no-build-isolation --editable .
