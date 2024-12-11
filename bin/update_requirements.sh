@@ -14,13 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# Set up devcontainer
-set -e
+# Update requirements.txt.
+set -euxo pipefail
+cd "$(dirname "$0")/.."
 
-python --version
-pip --version
-pip list
-
-pip install --no-deps --require-hashes -r requirements.txt
-pip install --no-deps --no-index --no-build-isolation --editable .
-pip list
+pip-compile --quiet --generate-hashes --reuse-hashes --upgrade --strip-extras \
+    --extra dev setup.py examples/requirements.in

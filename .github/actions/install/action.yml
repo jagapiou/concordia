@@ -46,20 +46,12 @@ runs:
     - name: Create venv
       if: steps.restore.outputs.cache-hit != 'true'
       shell: bash
-      run: |
-        python -m venv venv
+      run: ./bin/setup_venv.sh venv
 
     - name: Activate venv
       shell: bash
       run: |
         echo "${PWD}/venv/bin" >> $GITHUB_PATH
-
-    - name: Install
-      if: steps.restore.outputs.cache-hit != 'true'
-      shell: bash
-      run: |
-        pip install --require-virtualenv --require-hashes -r requirements.txt
-        pip install --require-virtualenv --no-deps --no-index --no-build-isolation --editable .
 
     - name: Show installation
       shell: bash
