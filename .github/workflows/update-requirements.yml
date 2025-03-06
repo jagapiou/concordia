@@ -38,7 +38,7 @@ jobs:
         uses: ./.github/actions/install
 
       - name: Compile requirements.txt
-        run: pip-compile --extra=dev --generate-hashes --strip-extras examples/requirements.in setup.py
+        run: pip-compile --generate-hashes --strip-extras --output_file=requirements.txt --extra=dev setup.py examples/requirements.in
 
       - name: Check for changes
         id: check_changes
