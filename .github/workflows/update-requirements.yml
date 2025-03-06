@@ -30,6 +30,9 @@ jobs:
     name: Test examples
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    permissions:
+        contents: write
+        pull-requests: write
     steps:
       - name: Checkout Melting Pot
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -43,7 +46,11 @@ jobs:
       - name: Check for changes
         id: check_changes
         run: |
-          git diff --quiet || echo "::set-output name=changed::true"
+          if git diff --quiet; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
 
       - name: Create pull request
         if: steps.check_changes.outputs.changed == 'true'
