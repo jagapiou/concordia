@@ -5,7 +5,7 @@ updates:
     schedule:
       interval: monthly
     allow:
-      - dependency-type: "all"
+      dependency-type: "all"
     groups:
       pip:
         patterns:
