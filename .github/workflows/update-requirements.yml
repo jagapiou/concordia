@@ -1,0 +1,60 @@
+name: update-requirements
+
+on:
+  schedule:
+    - cron: "0 2 1 * *"  # First day of every month at 2am.
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/update-requirements.yml'
+      - 'examples/requirements.in'
+      - 'setup.py'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/update-requirements.yml'
+      - 'examples/requirements.in'
+      - 'setup.py'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+permissions: read-all
+
+jobs:
+  test-examples:
+    name: Test examples
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout Melting Pot
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Install Melting Pot
+        uses: ./.github/actions/install
+
+      - name: Compile requirements.txt
+        run: pip-compile --extra=dev --generate-hashes --strip-extras examples/requirements.in setup.py
+
+      - name: Check for changes
+        id: check_changes
+        run: |
+          git diff --quiet || echo "::set-output name=changed::true"
+
+      - name: Create pull request
+        if: steps.check_changes.outputs.changed == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH_NAME="update-requirements-$(date +%Y%m%d%H%M%S)"
+          git checkout -b "${BRANCH_NAME}"
+          # git config --global user.email "github-actions@github.com"
+          # git config --global user.name "GitHub Actions Bot"
+          git add requirements.txt
+          git commit -m "Update requirements.txt"
+          git push origin "$BRANCH_NAME"
+          gh pr create --base "${GITHUB_BASE_REF:-main}" --head "$BRANCH_NAME" --title "Update requirements.txt" --body ''
