@@ -59,8 +59,9 @@ jobs:
       - name: Install from PyPI
         run: |
           VERSION="${{github.event.inputs.version}}"
-          pip install pip
-          pip install setuptools
+          pip install --upgrade pip
+          pip install --upgrade setuptools
+          pip install numpy>=2
           pip install "gdm-concordia${VERSION:+==$VERSION}"
           pip list
 
