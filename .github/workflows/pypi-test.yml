@@ -61,8 +61,7 @@ jobs:
           VERSION="${{github.event.inputs.version}}"
           pip install --upgrade pip
           pip install --upgrade setuptools
-          pip install numpy>=2
-          pip install "gdm-concordia${VERSION:+==$VERSION}"
+          pip install "gdm-concordia${VERSION:+==$VERSION}" numpy>=2
           pip list
 
       - name: Test installation
