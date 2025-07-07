@@ -17,11 +17,17 @@
 from collections.abc import Iterable, Sequence
 import datetime
 import functools
+import inspect
+import re
+import types
+from typing import Any
 
 from concordia.document import interactive_document
 from concordia.language_model import language_model
-from concordia.typing import component
+from concordia.typing.deprecated import component
 from concordia.utils import concurrency
+import numpy as np
+import pandas as pd
 
 
 def extract_text_between_delimiters(text: str, delimiter: str) -> str | None:
@@ -165,3 +171,208 @@ def apply_recursively(
     getattr(parent_component, function_name)()
   else:
     getattr(parent_component, function_name)(function_arg)
+
+
+def get_package_classes(module: types.ModuleType):
+  """Load all classes defined in any file within a package."""
+  package_name = module.__package__
+  prefabs = {}
+  submodule_names = [
+      value for value in dir(module) if not value.startswith('__')]
+  for submodule_name in submodule_names:
+    submodule = getattr(module, submodule_name)
+    all_var_names = dir(submodule)
+    for var_name in all_var_names:
+      var = getattr(submodule, var_name)
+      if inspect.isclass(var) and var.__module__.startswith(package_name):
+        key = f'{submodule_name}__{var_name}'
+        prefabs[key] = var()
+  return prefabs
+
+
+def print_pretty_prefabs(data_dict):
+  """Generates a Markdown string representation of a dictionary.
+
+  Each object's representation (from its __repr__ method) is formatted
+  to show the class name and its arguments on separate lines,
+  indented, within a Python code block for syntax highlighting.
+  Lines for 'entities=None' or 'entities=()' will be omitted.
+
+  Args:
+      data_dict (dict): The dictionary to format. Values are expected to be
+        objects whose __repr__ produces a string like "ClassName(arg1=value1,
+        arg2=value2, ...)".
+
+  Returns:
+      str: A string formatted as Markdown.
+  """
+  output_lines = []
+
+  if not data_dict:
+    return '(The dictionary is empty)'
+
+  for key, value_obj in data_dict.items():
+    output_lines.append('---')
+
+    value_str = repr(value_obj)
+
+    output_lines.append(f'**`{key}`**:')
+    output_lines.append('```python')
+
+    first_paren_idx = value_str.find('(')
+
+    if first_paren_idx != -1 and value_str.endswith(')'):
+      class_name = value_str[:first_paren_idx]
+      output_lines.append(f'{class_name}(')
+
+      last_paren_idx = value_str.rfind(')')
+
+      if last_paren_idx > first_paren_idx:
+        args_content = value_str[first_paren_idx + 1 : last_paren_idx]
+
+        if args_content.strip():
+          raw_split_args = re.split(
+              r',\s*(?=[_a-zA-Z][_a-zA-Z0-9]*=)', args_content
+          )
+
+          # Filter arguments before printing
+          args_to_print = []
+          for arg_str in raw_split_args:
+            stripped_arg_str = arg_str.strip()
+            if not stripped_arg_str:  # Skip if argument is empty after strip
+              continue
+
+            # Check if the argument is 'entities=None' or 'entities=()'
+            if (
+                stripped_arg_str == 'entities=None'
+                or stripped_arg_str == 'entities=()'
+            ):
+              continue  # Skip this argument
+
+            args_to_print.append(stripped_arg_str)
+
+          if args_to_print:
+            for i, final_arg_str in enumerate(args_to_print):
+              line_to_add = f'    {final_arg_str}'
+
+              if i < len(args_to_print) - 1:  # If it's not the last argument
+                line_to_add += ','
+
+              output_lines.append(line_to_add)
+
+        output_lines.append(')')
+      else:
+        output_lines.append(')')
+    else:
+      output_lines.append(value_str)
+
+    output_lines.append('```')
+
+  if data_dict:
+    output_lines.append('---')
+
+  return '\n'.join(output_lines)
+
+
+def find_data_in_nested_structure(
+    data: Sequence[Any] | dict[str, Any], key: str
+) -> list[Any]:
+  """Recursively finds all instances of a given key in nested dictionaries/lists."""
+  results = []
+  if isinstance(data, dict):
+    for k, v in data.items():
+      if k == key:
+        results.append(v)
+      results.extend(find_data_in_nested_structure(v, key))
+  elif isinstance(data, list):
+    for item in data:
+      results.extend(find_data_in_nested_structure(item, key))
+  return results
+
+
+def deep_compare_components(comp1, comp2, test_case, skip_keys=None):
+  """Recursively compares attributes of two components."""
+  test_case.assertEqual(type(comp1), type(comp2))
+
+  d1 = comp1.__dict__
+  d2 = comp2.__dict__
+
+  print(f'{comp1.__class__.__name__}-> {d1.keys()=}')
+  print(f'{comp2.__class__.__name__}-> {d2.keys()=}')
+
+  test_case.assertEqual(d1.keys(), d2.keys())
+
+  for key in d1:
+
+    if key in skip_keys:
+      continue
+
+    val1 = d1[key]
+    val2 = d2[key]
+
+    deep_compare_values(
+        val1, val2, test_case, key_path=key, skip_keys=skip_keys
+    )
+
+
+def deep_compare_values(val1, val2, test_case, key_path='', skip_keys=None):
+  """Recursively compares values."""
+  test_case.assertEqual(type(val1), type(val2), f'Type mismatch at {key_path}')
+
+  if isinstance(val1, dict):
+    test_case.assertEqual(
+        val1.keys(), val2.keys(), f'Keys mismatch at {key_path}'
+    )
+    for k in val1:
+      deep_compare_values(
+          val1[k],
+          val2[k],
+          test_case,
+          key_path=f'{key_path}.{k}',
+          skip_keys=skip_keys,
+      )
+  elif isinstance(val1, list) or isinstance(val1, tuple):
+    test_case.assertEqual(
+        len(val1), len(val2), f'Length mismatch at {key_path}'
+    )
+    for i in range(len(val1)):
+      deep_compare_values(
+          val1[i],
+          val2[i],
+          test_case,
+          key_path=f'{key_path}[{i}]',
+          skip_keys=skip_keys,
+      )
+  elif isinstance(val1, set):
+    test_case.assertEqual(val1, val2, f'Set mismatch at {key_path}')
+  elif isinstance(val1, (int, float, str, bool, type(None))):
+    test_case.assertEqual(val1, val2, f'Value mismatch at {key_path}')
+  elif isinstance(val1, pd.DataFrame):
+    pd.testing.assert_frame_equal(val1, val2, check_dtype=False)
+  elif isinstance(val1, np.ndarray):
+    np.testing.assert_array_equal(
+        val1, val2, err_msg=f'Array mismatch at {key_path}'
+    )
+  elif type(val1).__module__ == np.__name__:
+    # Handle other numpy types like dtypes, scalars
+    test_case.assertEqual(val1, val2, f'NumPy type mismatch at {key_path}')
+  elif isinstance(val1, types.MappingProxyType):
+    deep_compare_values(
+        dict(val1),
+        dict(val2),
+        test_case,
+        key_path=key_path,
+        skip_keys=skip_keys,
+    )
+  else:
+    # For other object types, you might need custom logic
+    # or just check if they are the same instance if appropriate.
+    try:
+      # Attempt to compare their __dict__ if they are custom objects
+      deep_compare_components(val1, val2, test_case, skip_keys=skip_keys)
+    except AttributeError as e:
+      test_case.fail(
+          f'Unhandled type for comparison at {key_path}: {type(val1)} - {e}'
+      )
+    except AssertionError as e:
+      test_case.fail(f'Component difference at {key_path}: {type(val1)} - {e}')

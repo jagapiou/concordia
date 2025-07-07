@@ -21,10 +21,13 @@ import datetime
 import logging
 import re
 from typing import Any
-from concordia.associative_memory import associative_memory
+
+from concordia.associative_memory import basic_associative_memory as associative_memory
 from concordia.document import interactive_document
 from concordia.language_model import language_model
 from dateutil.relativedelta import relativedelta  # pylint: disable=g-importing-member
+import numpy as np
+
 
 logger = logging.getLogger(__name__)
 
@@ -57,24 +60,56 @@ class AgentConfig:
   context: str = ''
   specific_memories: str = ''
   goal: str = ''
-  date_of_birth: datetime.datetime = DEFAULT_DOB
+  date_of_birth: datetime.datetime | None = None
   formative_ages: Collection[int] = DEFAULT_FORMATIVE_AGES
   extras: dict[str, Any] = dataclasses.field(default_factory=dict)
 
   def to_dict(self) -> dict[str, Any]:
     """Converts the AgentConfig to a dictionary."""
     result = dataclasses.asdict(self)
-    result['date_of_birth'] = self.date_of_birth.isoformat()
+    if self.date_of_birth is not None:
+      result['date_of_birth'] = self.date_of_birth.isoformat()
     return result
 
   @classmethod
   def from_dict(cls, data: dict[str, Any]) -> 'AgentConfig':
     """Initializes an AgentConfig from a dictionary."""
-    date_of_birth = datetime.datetime.fromisoformat(
-        data['date_of_birth']
-    )
-    data = data | {'date_of_birth': date_of_birth}
+    if 'date_of_birth' in data and data['date_of_birth'] is not None:
+      date_of_birth = datetime.datetime.fromisoformat(
+          data['date_of_birth']
+      )
+      data = data | {'date_of_birth': date_of_birth}
     return cls(**data)
+
+
+class MemoryFactory:
+  """Generator of formative memories."""
+
+  def __init__(
+      self,
+      embedder: Callable[[str], np.ndarray],
+  ):
+    """Initializes the memory factory.
+
+    Args:
+      embedder: The text embedder to use
+    """
+    self._embedder = embedder
+
+  def make_blank_memory(
+      self,
+  ) -> associative_memory.AssociativeMemoryBank:
+    """Creates a blank memory.
+
+    Returns a blank memory
+
+    Returns:
+      An empty memory structure
+    """
+
+    return associative_memory.AssociativeMemoryBank(
+        sentence_embedder=self._embedder,
+    )
 
 
 class FormativeMemoryFactory:
@@ -84,27 +119,26 @@ class FormativeMemoryFactory:
       self,
       *,
       model: language_model.LanguageModel,
+      embedder: Callable[[str], np.ndarray],
       shared_memories: Sequence[str] = (),
       delimiter_symbol: str = '***',
-      blank_memory_factory_call: Callable[
-          [], associative_memory.AssociativeMemory
-      ],
       current_date: datetime.datetime | None = None,
   ):
     """Initializes the formative memory factory.
 
     Args:
       model: the language model to use for generating memories
+      embedder: The text embedder to use
       shared_memories: memories to be added to all agents
       delimiter_symbol: the delimiter to use when splitting the generated
         episodes
-      blank_memory_factory_call: a function that returns a new blank memory
       current_date: (optional) the date of the simulation, used to calculate
         the age of each individual at the time of the simulation.
     """
     self._model = model
     self._delimiter_symbol = delimiter_symbol
-    self._blank_memory_factory_call = blank_memory_factory_call
+    self._blank_memory_factory_call = MemoryFactory(
+        embedder=embedder).make_blank_memory
     self._shared_memories = shared_memories
     self._current_date = current_date
 
@@ -128,8 +162,9 @@ class FormativeMemoryFactory:
     question = (
         f'Write a life story for a {agent_config.gender} character '
         f'named {agent_config.name} ')
-    question += (
-        f'who was born in the year {str(agent_config.date_of_birth.year)} ')
+    if agent_config.date_of_birth is not None:
+      question += (
+          f'who was born in the year {str(agent_config.date_of_birth.year)} ')
     if agent_config.traits:
       question += (
           f'with the following traits: {agent_config.traits}. ')
@@ -148,7 +183,8 @@ class FormativeMemoryFactory:
         f'understanding of {agent_config.name}.'
     )
     if agent_config.context:
-      question += f' Incorporate the following context: {agent_config.context}'
+      question += ('Incorporate the following context into the '
+                   f'story: {agent_config.context}')
     result = prompt.open_question(
         question,
         max_tokens=4500,
@@ -159,7 +195,7 @@ class FormativeMemoryFactory:
 
   def add_memories(
       self,
-      memory: associative_memory.AssociativeMemory,
+      memory: associative_memory.AssociativeMemoryBank,
       agent_config: AgentConfig,
   ) -> None:
     """Creates formative memories of the agent at specific ages based on traits.
@@ -236,25 +272,25 @@ class FormativeMemoryFactory:
           'probably not problematic.')
 
     for episode_age, episode in zip(agent_config.formative_ages, episodes):
-      memory.add(
-          episode,
-          tags=['episode'],
-          timestamp=(
-              agent_config.date_of_birth + relativedelta(years=episode_age)),
-      )
+      if agent_config.date_of_birth is not None:
+        timestamp = (
+            agent_config.date_of_birth + relativedelta(years=episode_age))
+        memory_to_add = f'[{timestamp}] {episode}'
+      else:
+        memory_to_add = episode
+      memory.add(memory_to_add)
 
-    if self._current_date:
+    if self._current_date and agent_config.date_of_birth is not None:
       age = relativedelta(self._current_date, agent_config.date_of_birth).years
+      timestamp = self._current_date
       memory.add(
-          f'{agent_config.name} is {age} years old.',
-          tags=['info'],
-          timestamp=self._current_date,
+          f'[{timestamp}] {agent_config.name} is {age} years old.',
       )
 
   def make_memories(
       self,
       agent_config: AgentConfig,
-  ) -> associative_memory.AssociativeMemory:
+  ) -> associative_memory.AssociativeMemoryBank:
     """Creates agent memory from the agent config."""
 
     mem = self._blank_memory_factory_call()
@@ -264,7 +300,7 @@ class FormativeMemoryFactory:
 
     context = agent_config.context
     if agent_config.goal:
-      context += '\n' + agent_config.goal
+      context += '\n' + f'{agent_config.name}\'s goal is: {agent_config.goal}'
 
     self.add_memories(memory=mem, agent_config=agent_config)
 

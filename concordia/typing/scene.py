@@ -19,12 +19,7 @@ import dataclasses
 import datetime
 from typing import Mapping, Union
 
-from concordia.agents import entity_agent
-from concordia.agents import entity_agent_with_logging
-from concordia.associative_memory import formative_memories
-from concordia.environment import game_master
-from concordia.environment.unstable import engine as engine_lib
-from concordia.typing import agent as agent_lib
+from concordia.typing import entity as entity_lib
 
 
 @dataclasses.dataclass(frozen=True)
@@ -33,31 +28,33 @@ class SceneTypeSpec:
 
   Attributes:
     name: name of this type of scene.
-    premise: map player names to messages they receive before the scene.
-      Messages may be either literal strings or functions that return strings.
-    conclusion: map player names to messages they receive after the scene.
-      Messages may be either literal strings or functions mapping player names
-      to strings.
+    game_master: specify a game master to use for this type of scene.
+    game_master_name: specify a game master to use for this type of scene.
+    engine: specify a engine to use for this type of scene.
+    default_premise: map player names to messages they receive before the scene.
+      Messages may be either literal strings or functions of player name that
+      return strings.
     action_spec: optionally specify an action spec other than the default for
       the game master to ask the agents to produce during steps of this scene.
-    override_game_master: optionally specify a game master to use instead of the
-      default one.
-    save_after_each_scene: optionally specify whether to save the agent's state
-      after each scene.
+    possible_participants: optionally specify a list of possible participants
+      for this scene. If specified, the participants field in the
+      SceneSpec will be intersected with this list to determine the
+      actual participants for each scene.
   """
 
   name: str
-  premise: Mapping[str, Sequence[str | Callable[[str], str]]] | None = None
-  conclusion: Mapping[str, Sequence[str | Callable[[str], str]]] | None = None
+  game_master_name: str | None = None
+  default_premise: Mapping[str, Sequence[str | Callable[[str], str]]] | None = (
+      None
+  )
   action_spec: (
       Union[
-          Mapping[str, agent_lib.ActionSpec],
-          agent_lib.ActionSpec,
+          Mapping[str, entity_lib.ActionSpec],
+          entity_lib.ActionSpec,
       ]
       | None
   ) = None
-  override_game_master: game_master.GameMaster | None = None
-  save_after_each_scene: bool = False
+  possible_participants: Sequence[str] | None = None
 
 
 @dataclasses.dataclass(frozen=True)
@@ -66,74 +63,17 @@ class SceneSpec:
 
   Attributes:
     scene_type: Select a specific type of scene.
+    participants: Which players participate in the scene.
+    num_rounds: How many rounds the scene lasts.
     start_time: Automatically advance the clock to this time when the scene
       starts.
-    participant_configs: Which players participate in the scene.
-    num_rounds: How many rounds the scene lasts.
+    premise: Map player names to messages they receive before the scene
+      (overrides the default premise of the scene type). Messages may be
+      either literal strings or functions of player name that return strings.
   """
 
   scene_type: SceneTypeSpec
-  start_time: datetime.datetime
-  participant_configs: Sequence[formative_memories.AgentConfig]
-  num_rounds: int
-
-
-@dataclasses.dataclass(frozen=True)
-class ExperimentalSceneTypeSpec:
-  """A specification for a type of scene.
-
-  Attributes:
-    name: name of this type of scene.
-    game_master: specify a game master to use for this type of scene.
-    engine: specify a engine to use for this type of scene.
-    premise: map player names to messages they receive before the scene.
-      Messages may be either literal strings or functions that return strings.
-    conclusion: map player names to messages they receive after the scene.
-      Messages may be either literal strings or functions mapping player names
-      to strings.
-    action_spec: optionally specify an action spec other than the default for
-      the game master to ask the agents to produce during steps of this scene.
-    nonplayer_entities: optionally specify non-player entities to use in this
-      scene.
-    save_after_each_scene: optionally specify whether to save the agent's state
-      after each scene.
-    possible_participants: optionally specify a list of possible participants
-      for this scene. If specified, the participants field in the
-      ExperimentalSceneSpec will be intersected with this list to determine the
-      actual participants for each scene.
-  """
-
-  name: str
-  game_master: entity_agent_with_logging.EntityAgentWithLogging
-  engine: engine_lib.Engine
-  premise: Mapping[str, Sequence[str | Callable[[str], str]]] | None = None
-  conclusion: Mapping[str, Sequence[str | Callable[[str], str]]] | None = None
-  action_spec: (
-      Union[
-          Mapping[str, agent_lib.ActionSpec],
-          agent_lib.ActionSpec,
-      ]
-      | None
-  ) = None
-  nonplayer_entities: Sequence[
-      entity_agent.EntityAgent] = tuple([])
-  save_after_each_scene: bool = False
-  possible_participants: Sequence[str] | None = None
-
-
-@dataclasses.dataclass(frozen=True)
-class ExperimentalSceneSpec:
-  """Specify a specific scene.
-
-  Attributes:
-    scene_type: Select a specific type of scene.
-    start_time: Automatically advance the clock to this time when the scene
-      starts.
-    participants: Which players participate in the scene.
-    num_rounds: How many rounds the scene lasts.
-  """
-
-  scene_type: ExperimentalSceneTypeSpec
-  start_time: datetime.datetime
   participants: Sequence[str]
   num_rounds: int
+  start_time: datetime.datetime | None = None
+  premise: Mapping[str, Sequence[str | Callable[[str], str]]] | None = None

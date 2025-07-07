@@ -14,8 +14,6 @@
 
 """Library of components contributed by users."""
 
-from concordia.contrib.components.game_master import bargain_payoffs
-from concordia.contrib.components.game_master import daily_activities
 from concordia.contrib.components.game_master import industrial_action
-from concordia.contrib.components.game_master import restricted_inventory
-from concordia.contrib.components.game_master import world_background_and_relevance
+from concordia.contrib.components.game_master import triggered_function
+from concordia.contrib.components.game_master import triggered_inventory_effect

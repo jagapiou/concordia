@@ -18,19 +18,22 @@
 from collections.abc import Callable, Mapping, Sequence
 import datetime
 
-from concordia.agents import deprecated_agent
 from concordia.agents import entity_agent
-from concordia.associative_memory import associative_memory
-from concordia.components.game_master import current_scene
+from concordia.components.agent import memory as memory_component
+from concordia.components.game_master import event_resolution as event_resolution_component
+from concordia.components.game_master import switch_act
+from concordia.environment.scenes import runner as scene_runner
 from concordia.language_model import language_model
-from concordia.typing import component
+from concordia.typing import entity as entity_lib
+from concordia.typing import entity_component
+from concordia.typing import logging
 import numpy as np
 import termcolor
 
 
 # A function that maps number of cooperators to a scalar.
 CollectiveActionProductionFunction = Callable[[int], float]
-PlayersT = Sequence[deprecated_agent.BasicAgent | entity_agent.EntityAgent]
+PlayersT = Sequence[entity_agent.EntityAgent]
 
 
 def get_pressure_str(pressure: float, pressure_threshold: float) -> str:
@@ -49,36 +52,40 @@ def get_pressure_str(pressure: float, pressure_threshold: float) -> str:
     raise ValueError('Pressure must be between 0 and 1.')
 
 
-class LaborStrike(component.Component):
+class LaborStrike(entity_component.ContextComponent):
   """A component for computing pressure created through labor collective action.
   """
 
   def __init__(
       self,
       model: language_model.LanguageModel,
-      memory: associative_memory.AssociativeMemory,
       cooperative_option: str,
       resolution_scene: str,
       production_function: CollectiveActionProductionFunction,
-      players: Sequence[deprecated_agent.BasicAgent | entity_agent.EntityAgent],
+      all_player_names: Sequence[str],
       acting_player_names: Sequence[str],
       players_to_inform: Sequence[str],
       clock_now: Callable[[], datetime.datetime],
       pressure_threshold: float,
-      name: str = 'pressure from industrial action',
+      event_resolution_component_key: str = (
+          switch_act.DEFAULT_RESOLUTION_COMPONENT_KEY),
+      memory_component_key: str = (
+          memory_component.DEFAULT_MEMORY_COMPONENT_KEY
+      ),
+      pre_act_label: str = '',
+      logging_channel: logging.LoggingChannel = logging.NoOpLoggingChannel,
       verbose: bool = False,
   ):
     """Initialize a component for computing pressure created by a labor strike.
 
     Args:
       model: a language model
-      memory: an associative memory
       cooperative_option: which option choice constitutes cooperation
       resolution_scene: on which scene type should this component be updated
         after the event, i.e. when to check the joint action and compute results
       production_function: pressure produced a function of he number of
         individuals joining the strike
-      players: sequence of agents (a superset of the active players)
+      all_player_names: sequence of names (a superset of the active players)
       acting_player_names: sequence of names of players who act each stage. In
         a labor strike scenario these players would typically be the workers.
         They have to decide whether to join the strike or not.
@@ -88,40 +95,37 @@ class LaborStrike(component.Component):
       clock_now: Function to call to get current time.
       pressure_threshold: the threshold above which the boss will feel compelled
         to take action.
-      name: name of this component e.g. Possessions, Account, Property, etc
+      event_resolution_component_key: The name of the event resolution
+        component.
+      memory_component_key: The name of the memory component.
+      pre_act_label: Prefix to add to the output of the component when called
+        in `pre_act`.
+      logging_channel: The channel to log debug information to.
       verbose: whether to print the full update chain of thought or not
     """
+    self._pre_act_label = pre_act_label
+    self._logging_channel = logging_channel
+
     self._model = model
-    self._memory = memory
+    self._memory_component_key = memory_component_key
+    self._event_resolution_component_key = event_resolution_component_key
     self._cooperative_option = cooperative_option
     self._production_function = production_function
-    self._players = players
+    self._all_player_names = all_player_names
     self._acting_player_names = acting_player_names
     self._players_to_inform = players_to_inform
     self._clock_now = clock_now
-    self._name = name
     self._pressure_threshold = pressure_threshold
+    self._resolution_scene = resolution_scene
+
     self._verbose = verbose
 
     self._history = []
     self._state = ''
-    self._partial_states = {player.name: '' for player in self._players}
-    self._player_scores = {player.name: 0 for player in self._players}
-
-    self._resolution_scene = resolution_scene
-    self._current_scene = current_scene.CurrentScene(
-        name='current scene type',
-        memory=self._memory,
-        clock_now=self._clock_now,
-        verbose=self._verbose,
-    )
-
-    self._map_names_to_players = {
-        player.name: player for player in self._players}
+    self._player_scores = {name: 0 for name in self._all_player_names}
+    self._latest_action_spec = None
 
     self.reset()
-    # Set the initial state's string representation.
-    self.update()
 
   def reset(self) -> None:
     self._stage_idx = 0
@@ -129,31 +133,15 @@ class LaborStrike(component.Component):
     self._partial_joint_action = {
         name: None for name in self._acting_player_names}
 
-  def name(self) -> str:
-    """Returns the name of this component."""
-    return self._name
+  def _get_current_scene_type(self) -> str:
+    memory = self.get_entity().get_component(
+        self._memory_component_key, type_=memory_component.Memory
+    )
+    return scene_runner.get_current_scene_type(memory=memory)
 
-  def get_last_log(self):
-    if self._history:
-      return self._history[-1].copy()
-
-  def get_history(self):
-    return self._history.copy()
-
-  def state(self) -> str:
-    return self._state
-
-  def partial_state(
-      self,
-      player_name: str,
-  ) -> str:
-    """Return a player-specific view of the component's state."""
-    return self._partial_states[player_name]
-
-  def update(self) -> None:
-    self._current_scene.update()
-
-  def _joint_action_is_complete(self, joint_action: Mapping[str, str]) -> bool:
+  def _joint_action_is_complete(
+      self, joint_action: Mapping[str, str | None]
+  ) -> bool:
     for acting_player_name in self._acting_player_names:
       if joint_action[acting_player_name] is None:
         return False
@@ -161,7 +149,7 @@ class LaborStrike(component.Component):
 
   def _binarize_joint_action(
       self,
-      joint_action: Mapping[str, str]) -> Mapping[str, bool]:
+      joint_action: Mapping[str, str | None]) -> Mapping[str, bool]:
     binary_joint_action = {name: act == self._cooperative_option
                            for name, act in joint_action.items()}
     return binary_joint_action
@@ -171,51 +159,63 @@ class LaborStrike(component.Component):
     num_cooperators = np.sum(list(binary_joint_action.values()))
     return self._production_function(num_cooperators)
 
-  def update_before_event(self, player_action_attempt: str) -> None:
-    # `player_action_attempt` is formatted as "name: attempt".
-    current_scene_type = self._current_scene.state()
-    if current_scene_type == self._resolution_scene:
-      player_name, choice_str = player_action_attempt.split(': ')
+  def pre_act(
+      self,
+      action_spec: entity_lib.ActionSpec,
+  ) -> str:
+    self._latest_action_spec = action_spec
+    current_scene_type = self._get_current_scene_type()
+    if (
+        current_scene_type == self._resolution_scene
+        and action_spec.output_type == entity_lib.OutputType.RESOLVE
+    ):
+      event_resolution = self.get_entity().get_component(
+          self._event_resolution_component_key,
+          type_=event_resolution_component.EventResolution,
+      )
+      player_name = event_resolution.get_active_entity_name()
+      choice = event_resolution.get_putative_action()
       if player_name in self._acting_player_names:
-        self._partial_joint_action[player_name] = choice_str
+        self._partial_joint_action[player_name] = choice
 
-  def update_after_event(
+    self._logging_channel({
+        'Key': self._pre_act_label,
+        'Value': action_spec,
+    })
+    return ''
+
+  def post_act(
       self,
       event_statement: str,
-  ) -> None:
-    current_scene_type = self._current_scene.state()
-    joint_action_for_log = ''
+  ) -> str:
+    current_scene_type = self._get_current_scene_type()
+    # joint_action_for_log = ''
     finished = False
-    if current_scene_type == self._resolution_scene:
+    if (
+        current_scene_type == self._resolution_scene
+        and self._latest_action_spec == entity_lib.OutputType.RESOLVE
+    ):
       # Check if all players have acted so far in the current stage game.
       joint_action = self._partial_joint_action.copy()
-      if self._joint_action_is_complete(joint_action):  # pytype: disable=wrong-arg-types
+      if self._joint_action_is_complete(joint_action):
         # Map the joint action to an amount of pressure produced.
-        binary_joint_action = self._binarize_joint_action(joint_action)  # pytype: disable=wrong-arg-types
+        binary_joint_action = self._binarize_joint_action(joint_action)
         pressure = self._get_pressure_from_joint_action(binary_joint_action)
         pressure_str = get_pressure_str(pressure, self._pressure_threshold)
-        for player_name in self._players_to_inform:
-          self._partial_states[player_name] = pressure_str
-          self._map_names_to_players[player_name].observe(pressure_str)
 
-        joint_action_for_log = str(self._partial_joint_action)
+        memory = self.get_entity().get_component(
+            self._memory_component_key, type_=memory_component.Memory
+        )
+        memory.add(pressure_str)
+        lowercase_pressure_str = pressure_str[0].lower() + pressure_str[1:]
+        for player_name in self._players_to_inform:
+          memory.add(f'{player_name} learned that {lowercase_pressure_str}')
+
+        # joint_action_for_log = str(self._partial_joint_action)
         finished = True
 
         if self._verbose:
-          print(termcolor.colored(self.state(), 'yellow'))
-
-    num_players_already_acted = np.sum(
-        [value is not None for value in self._partial_joint_action.values()])
-    total_num_players_to_act = len(self._acting_player_names)
-    update_log = {
-        'date': self._clock_now(),
-        'Summary': self.name(),
-        'Stage index': self._stage_idx,
-        'How many players acted so far this stage': (
-            f'{num_players_already_acted}/{total_num_players_to_act}'),
-        'Joint action': joint_action_for_log,
-    }
-    self._history.append(update_log)
+          print(termcolor.colored(self._state, 'yellow'))
 
     if finished:
       # Advance to the next stage.
@@ -223,6 +223,16 @@ class LaborStrike(component.Component):
       self._partial_joint_action = {
           name: None for name in self._acting_player_names}
 
+    return ''
+
   def get_scores(self) -> Mapping[str, float]:
     """Return the cumulative score for each player."""
     return self._player_scores
+
+  def get_state(self) -> entity_component.ComponentState:
+    """Converts the component to JSON data."""
+    return {'state': self._state}
+
+  def set_state(self, state: entity_component.ComponentState) -> None:
+    """Sets the component state from JSON data."""
+    self._state = state['state']

@@ -19,7 +19,10 @@ from collections.abc import Collection, Mapping
 import enum
 import functools
 from typing import TypeVar
+
 from concordia.typing import entity as entity_lib
+from concordia.typing.deprecated import logging as logging_lib
+
 
 ComponentName = str
 ComponentContext = str
@@ -29,6 +32,8 @@ ComponentT = TypeVar("ComponentT", bound="BaseComponent")
 _LeafT = str | int | float | None
 _ValueT = _LeafT | Collection["_ValueT"] | Mapping[str, "_ValueT"]
 ComponentState = Mapping[str, _ValueT]
+
+EntityState = Mapping[str, ComponentState | Mapping[str, ComponentState]]
 
 
 class Phase(enum.Enum):
@@ -82,7 +87,7 @@ class Phase(enum.Enum):
       raise ValueError(f"The transition from {self} to {successor} is invalid.")
 
 
-class BaseComponent:
+class BaseComponent(metaclass=abc.ABCMeta):
   """A base class for components."""
 
   _entity: "EntityWithComponents | None" = None
@@ -96,7 +101,7 @@ class BaseComponent:
     Raises:
       RuntimeError: If the entity is already set.
     """
-    if self._entity is not None:
+    if self._entity is not None and self._entity != entity:
       raise RuntimeError("Entity is already set.")
     self._entity = entity
 
@@ -110,6 +115,7 @@ class BaseComponent:
       raise RuntimeError("Entity is not set.")
     return self._entity
 
+  @abc.abstractmethod
   def get_state(self) -> ComponentState:
     """Returns the state of the component.
     
@@ -118,14 +124,15 @@ class BaseComponent:
     """
     return {}
 
-  def set_state(self, state: ComponentState):
+  @abc.abstractmethod
+  def set_state(self, state: ComponentState) -> None:
     """Sets the state of the component.
     
     This is used to restore the state of the component. The state is assumed to
     be the one returned by `get_state`.
     The state does not need to contain any information that is passed in the 
     initialization of the component (e.g. the memory bank, names of other 
-    componets etc.)
+    components etc.)
     It is assumed that set_state is called on the component after it was 
     initialized with the same parameters as the one used to restore it.
     The default implementation does nothing, which implies that the component
@@ -134,7 +141,7 @@ class BaseComponent:
     Example (Creating a copy):
       obj1 = Component(**kwargs)
       state = obj.get_state()
-      obj2 = Componet(**kwargs)
+      obj2 = Component(**kwargs)
       obj2.set_state(state)
       # obj1 and obj2 will behave identically.
 
@@ -153,6 +160,18 @@ class BaseComponent:
     """
     del state
     return None
+
+
+class ComponentWithLogging(BaseComponent):
+  """A base class for components with logging."""
+
+  def __init__(self, *args, **kwargs):
+    super().__init__(*args, **kwargs)
+    self._logging_channel = logging_lib.NoOpLoggingChannel
+
+  def set_logging_channel(self, logging_channel: logging_lib.LoggingChannel):
+    """Sets the logging channel for the component."""
+    self._logging_channel = logging_channel
 
 
 class EntityWithComponents(entity_lib.Entity):
@@ -176,6 +195,16 @@ class EntityWithComponents(entity_lib.Entity):
       name: The name of the component to fetch.
       type_: If passed, the returned component will be cast to this type.
     """
+    raise NotImplementedError()
+
+  @abc.abstractmethod
+  def get_state(self) -> EntityState:
+    """Returns the state of the entity."""
+    raise NotImplementedError()
+
+  @abc.abstractmethod
+  def set_state(self, state: EntityState) -> None:
+    """Sets the state of the entity."""
     raise NotImplementedError()
 
 

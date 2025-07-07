@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 """The abstract class that defines an Entity interface."""
 
 import abc
@@ -20,6 +19,7 @@ from collections.abc import Sequence
 import dataclasses
 import enum
 import functools
+from typing import Any
 
 
 @enum.unique
@@ -35,6 +35,8 @@ class OutputType(enum.Enum):
   NEXT_ACTION_SPEC = enum.auto()
   RESOLVE = enum.auto()
   TERMINATE = enum.auto()
+  NEXT_GAME_MASTER = enum.auto()
+  SKIP_THIS_STEP = enum.auto()
 
 PLAYER_ACTION_TYPES = (
     OutputType.FREE,
@@ -47,18 +49,20 @@ GAME_MASTER_ACTION_TYPES = (
     OutputType.NEXT_ACTION_SPEC,
     OutputType.RESOLVE,
     OutputType.TERMINATE,
+    OutputType.NEXT_GAME_MASTER,
+    OutputType.SKIP_THIS_STEP,
 )
 FREE_ACTION_TYPES = (
     OutputType.FREE,
     OutputType.MAKE_OBSERVATION,
-    OutputType.NEXT_ACTING,
+    OutputType.NEXT_ACTION_SPEC,
     OutputType.RESOLVE,
 )
 CHOICE_ACTION_TYPES = (
     OutputType.CHOICE,
     OutputType.NEXT_ACTING,
-    OutputType.NEXT_ACTION_SPEC,
     OutputType.TERMINATE,
+    OutputType.NEXT_GAME_MASTER,
 )
 
 BINARY_OPTIONS = {'affirmative': 'Yes', 'negative': 'No'}
@@ -129,19 +133,37 @@ def choice_action_spec(**kwargs) -> ActionSpec:
   return ActionSpec(output_type=OutputType.CHOICE, **kwargs)
 
 
+def skip_this_step_action_spec(**kwargs) -> ActionSpec:
+  """Returns an action spec with output type SKIP_THIS_STEP."""
+  return ActionSpec(
+      output_type=OutputType.SKIP_THIS_STEP, call_to_action='', **kwargs
+  )
+
+
 DEFAULT_CALL_TO_ACTION = (
-    'What would {name} do for the next {timedelta}? '
-    'Give a specific activity. Pick an activity that '
-    'would normally take about {timedelta} to complete. '
-    'If the selected action has a direct or indirect object then it '
-    'must be specified explicitly. For example, it is valid to respond '
-    'with "{name} votes for Caroline because..." but not '
-    'valid to respond with "{name} votes because...".'
+    'What would {name} do next?'
+    ' Give a specific activity.'
+    ' If the selected action has a direct or indirect object then it'
+    ' must be specified explicitly.'
 )
 
 DEFAULT_ACTION_SPEC = free_action_spec(
     call_to_action=DEFAULT_CALL_TO_ACTION,
     tag='action',
+)
+
+
+DEFAULT_CALL_TO_SPEECH = (
+    'Given the above, what is {name} likely to say next? Respond in'
+    ' the format `{name} -- "..."` For example, '
+    'Cristina -- "Hello! Mighty fine weather today, right?", '
+    'Ichabod -- "I wonder if the alfalfa is ready to harvest", or '
+    'Townsfolk -- "Good morning".\n'
+)
+
+DEFAULT_SPEECH_ACTION_SPEC = free_action_spec(
+    call_to_action=DEFAULT_CALL_TO_SPEECH,
+    tag='speech',
 )
 
 
@@ -189,3 +211,12 @@ class Entity(metaclass=abc.ABCMeta):
       observation: The observation for the entity to process. Always a string.
     """
     raise NotImplementedError()
+
+
+class EntityWithLogging(Entity):
+  """An agent interface for taking actions."""
+
+  @abc.abstractmethod
+  def get_last_log(self) -> dict[str, Any]:
+    """Returns debugging information in the form of a dictionary."""
+    raise NotImplementedError

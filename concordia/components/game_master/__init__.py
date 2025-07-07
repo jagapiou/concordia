@@ -1,4 +1,4 @@
-# Copyright 2022 DeepMind Technologies Limited.
+# Copyright 2025 DeepMind Technologies Limited.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,16 +14,15 @@
 
 """Library of components specifically for generative game masters."""
 
-from concordia.components.game_master import conversation
-from concordia.components.game_master import coordination_payoffs
-from concordia.components.game_master import current_scene
-from concordia.components.game_master import direct_effect
+from concordia.components.game_master import event_resolution
+from concordia.components.game_master import instructions
 from concordia.components.game_master import inventory
-from concordia.components.game_master import inventory_based_score
-from concordia.components.game_master import player_status
-from concordia.components.game_master import relevant_events
-from concordia.components.game_master import schedule
-from concordia.components.game_master import schelling_diagram_payoffs
-from concordia.components.game_master import time_display
-from concordia.components.game_master import triggered_function
-from concordia.components.game_master import triggered_inventory_effect
+from concordia.components.game_master import make_observation
+from concordia.components.game_master import next_acting
+from concordia.components.game_master import next_game_master
+from concordia.components.game_master import payoff_matrix
+from concordia.components.game_master import questionnaire
+from concordia.components.game_master import scene_tracker
+from concordia.components.game_master import switch_act
+from concordia.components.game_master import terminate
+from concordia.components.game_master import world_state
