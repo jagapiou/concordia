@@ -42,12 +42,7 @@ jobs:
       matrix:
         os:
           - macos-13
-          - macos-14
-          - ubuntu-22.04
-          - ubuntu-24.04
         python-version:
-          - '3.11'
-          - '3.12'
           - '3.13'
 
     steps:
@@ -56,18 +51,15 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install Python dependencies
-        run: |
-          pip install --upgrade pip
-          pip install --upgrade setuptools
-          pip install pytest-xdist
-
       - name: Install from PyPI
         run: |
           VERSION="${{github.event.inputs.version}}"
-          pip -vvv install "gdm-concordia${VERSION:+==$VERSION}"
+          pip install --upgrade pip
+          pip install --upgrade setuptools
+          pip install "gdm-concordia${VERSION:+==$VERSION}" numpy>=2
           pip list
 
       - name: Test installation
         run: |
+          pip install pytest-xdist
           pytest -n auto --pyargs concordia
